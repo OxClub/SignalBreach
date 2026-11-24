@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,22 +23,28 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-val CyberBg = Color(0xFF070B0E)
-val CyberPanel = Color(0xFF0E151B)
-val CyberBorder = Color(0xFF1E323D)
+val CyberBg = Color(0xFF060A0D)
+val CyberPanel = Color(0xFF0D141A)
+val CyberBorder = Color(0xFF1C303B)
 val CyberNeonGreen = Color(0xFF00FF9C)
 val CyberCyan = Color(0xFF00D4FF)
 val CyberAmber = Color(0xFFFFB800)
+val CyberRed = Color(0xFFFF4D4D)
 val CyberText = Color(0xFFD6E4EC)
 val CyberMuted = Color(0xFF6B8594)
 
@@ -60,17 +68,18 @@ fun SignalBreachApp() {
     var solvedCases by remember {
         mutableStateOf(prefs.getStringSet("solved_cases", emptySet()) ?: emptySet())
     }
-    var selectedTab by remember { mutableIntStateOf(1) } // 0 = MAIL, 1 = TERMINAL, 2 = INTEL
+    var selectedTab by remember { mutableIntStateOf(1) } // 0=MAIL, 1=TERMINAL, 2=NET-MAP, 3=INTEL
+    var muted by remember { mutableStateOf(false) }
 
     val activeCase = CaseRepository.cases[currentCaseIndex]
     val isCurrentSolved = solvedCases.contains(activeCase.codeName)
 
     val terminalLines = remember(currentCaseIndex) {
         mutableStateListOf(
-            "WYRIX FORENSICS OS v4.2 [SECURE BOOT]",
-            "LOADED ${activeCase.codeName}: ${activeCase.title}",
-            "Type 'help' or tap quick commands below to start.",
-            "------------------------------------------------"
+            "WYRIX FORENSICS OS v4.5 [ENCRYPTED KERNEL]",
+            "MOUNTED ${activeCase.codeName}: ${activeCase.title}",
+            "Run 'ls' or tap quick commands below to inspect workspace.",
+            "----------------------------------------------------"
         )
     }
     var commandInput by remember { mutableStateOf("") }
@@ -86,6 +95,7 @@ fun SignalBreachApp() {
     fun runCommand(cmdText: String) {
         val clean = cmdText.trim()
         if (clean.isEmpty()) return
+        SoundEngine.playKeyClick()
         terminalLines.add("root@wyrix:~# $clean")
         if (clean.equals("clear", ignoreCase = true)) {
             terminalLines.clear()
@@ -109,78 +119,105 @@ fun SignalBreachApp() {
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // TOP HEADER BAR
+        // TOP STATUS BAR
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(CyberPanel)
                 .border(1.dp, CyberBorder)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "SIGNAL BREACH // ${activeCase.codeName}",
                     color = CyberNeonGreen,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    fontSize = 13.sp
                 )
                 Text(
                     text = activeCase.title,
                     color = CyberText,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp
+                    fontSize = 11.sp
                 )
             }
 
-            if (isCurrentSolved && currentCaseIndex < CaseRepository.cases.lastIndex) {
-                Button(
-                    onClick = {
-                        val next = currentCaseIndex + 1
-                        currentCaseIndex = next
-                        prefs.edit().putInt("unlocked_case_index", next).apply()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberNeonGreen),
-                    shape = RoundedCornerShape(4.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // SFX Toggle
+                Text(
+                    text = if (muted) "SFX:OFF" else "SFX:ON",
+                    color = if (muted) CyberMuted else CyberCyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    modifier = Modifier
+                        .border(1.dp, CyberBorder, RoundedCornerShape(4.dp))
+                        .clickable {
+                            muted = !muted
+                            SoundEngine.isMuted = muted
+                        }
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+
+                if (isCurrentSolved && currentCaseIndex < CaseRepository.cases.lastIndex) {
+                    Button(
+                        onClick = {
+                            SoundEngine.playKeyClick()
+                            val next = currentCaseIndex + 1
+                            currentCaseIndex = next
+                            prefs.edit().putInt("unlocked_case_index", next).apply()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberNeonGreen),
+                        shape = RoundedCornerShape(4.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Text(
+                            text = "NEXT >>",
+                            color = Color.Black,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    }
+                } else {
                     Text(
-                        text = "NEXT CASE >>",
-                        color = Color.Black,
+                        text = if (isCurrentSolved) "[SOLVED]" else "[ACTIVE]",
+                        color = if (isCurrentSolved) CyberNeonGreen else CyberAmber,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
                 }
-            } else {
-                Text(
-                    text = if (isCurrentSolved) "[SOLVED]" else "[ACTIVE]",
-                    color = if (isCurrentSolved) CyberNeonGreen else CyberAmber,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
             }
         }
 
-        // NAVIGATION TABS
+        // 4 NAVIGATION TABS
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(CyberBg)
                 .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            listOf("MAIL (${activeCase.emails.size})", "TERMINAL", "CASE INTEL").forEachIndexed { idx, label ->
+            val tabs = listOf("MAIL(${activeCase.emails.size})", "TERMINAL", "NET-MAP", "INTEL")
+            tabs.forEachIndexed { idx, label ->
                 val selected = selectedTab == idx
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .background(if (selected) CyberPanel else CyberBg, RoundedCornerShape(4.dp))
                         .border(1.dp, if (selected) CyberCyan else CyberBorder, RoundedCornerShape(4.dp))
-                        .clickable { selectedTab = idx }
+                        .clickable {
+                            SoundEngine.playKeyClick()
+                            if (idx == 2) SoundEngine.playSonarPing()
+                            selectedTab = idx
+                        }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -189,13 +226,13 @@ fun SignalBreachApp() {
                         color = if (selected) CyberCyan else CyberMuted,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     )
                 }
             }
         }
 
-        // MAIN CONTENT AREA
+        // TAB CONTENT
         when (selectedTab) {
             0 -> {
                 // MAIL CLIENT
@@ -218,8 +255,8 @@ fun SignalBreachApp() {
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(mail.sender, color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text(mail.timestamp, color = CyberMuted, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                Text(mail.sender, color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                Text(mail.timestamp, color = CyberMuted, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -259,7 +296,7 @@ fun SignalBreachApp() {
                         val textColor = when {
                             line.startsWith("root@wyrix") -> CyberCyan
                             line.contains("VERIFICATION SUCCESSFUL") -> CyberNeonGreen
-                            line.startsWith("ACCESS DENIED") || line.startsWith("ERROR") -> Color(0xFFFF5252)
+                            line.startsWith("ACCESS DENIED") || line.startsWith("ERROR") -> CyberRed
                             else -> CyberText
                         }
                         Text(
@@ -272,7 +309,7 @@ fun SignalBreachApp() {
                     }
                 }
 
-                // QUICK COMMAND CHIPS FOR MOBILE UX
+                // DYNAMIC QUICK-COMMAND CHIPS
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -280,13 +317,15 @@ fun SignalBreachApp() {
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val quickChips = listOf("help", "ls", "cat access.log", "cat token.b64", "decode ", "whois ", "submit ")
+                    val fileChips = activeCase.files.keys.map { "cat $it" }
+                    val quickChips = listOf("help", "ls") + fileChips + listOf("decode ", "whois ", "submit ")
                     quickChips.forEach { chip ->
                         Box(
                             modifier = Modifier
                                 .background(CyberPanel, RoundedCornerShape(4.dp))
                                 .border(1.dp, CyberBorder, RoundedCornerShape(4.dp))
                                 .clickable {
+                                    SoundEngine.playKeyClick()
                                     if (chip.endsWith(" ")) {
                                         commandInput = chip
                                     } else {
@@ -352,8 +391,19 @@ fun SignalBreachApp() {
             }
 
             2 -> {
-                // CASE INTEL & OBJECTIVE
-                Column(
+                // ANIMATED NETWORK TRACE RADAR (NET-MAP)
+                NetworkRadarView(
+                    nodes = activeCase.networkNodes,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                )
+            }
+
+            3 -> {
+                // CASE INTEL & CASE SELECTOR
+                LazyColumn(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -363,27 +413,152 @@ fun SignalBreachApp() {
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("INCIDENT BRIEFING", color = CyberAmber, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                    Text(activeCase.briefing, color = CyberText, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp)
-
-                    HorizontalDivider(color = CyberBorder)
-
-                    Text("PRIMARY OBJECTIVE", color = CyberNeonGreen, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                    Text(activeCase.objective, color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp)
-
-                    HorizontalDivider(color = CyberBorder)
-
-                    Text("SAVED CASES PROGRESS", color = CyberMuted, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                    CaseRepository.cases.forEach { c ->
+                    item {
+                        Text("INCIDENT BRIEFING", color = CyberAmber, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(activeCase.briefing, color = CyberText, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp)
+                    }
+                    item {
+                        HorizontalDivider(color = CyberBorder)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("PRIMARY OBJECTIVE", color = CyberNeonGreen, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(activeCase.objective, color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp)
+                    }
+                    item {
+                        HorizontalDivider(color = CyberBorder)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("CASE ARCHIVE (TAP TO SWITCH)", color = CyberMuted, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    }
+                    items(CaseRepository.cases.indices.toList()) { idx ->
+                        val c = CaseRepository.cases[idx]
                         val done = solvedCases.contains(c.codeName)
-                        Text(
-                            text = "${if (done) "[✓]" else "[ ]"} ${c.codeName}: ${c.title}",
-                            color = if (done) CyberNeonGreen else CyberText,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp
-                        )
+                        val unlocked = idx == 0 || solvedCases.contains(CaseRepository.cases[idx - 1].codeName) || done
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (idx == currentCaseIndex) Color(0xFF14222B) else Color.Transparent, RoundedCornerShape(4.dp))
+                                .border(1.dp, if (idx == currentCaseIndex) CyberCyan else CyberBorder, RoundedCornerShape(4.dp))
+                                .clickable(enabled = unlocked) {
+                                    SoundEngine.playKeyClick()
+                                    currentCaseIndex = idx
+                                    selectedTab = 1
+                                }
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${if (done) "[✓]" else if (unlocked) "[>]" else "[🔒]"} ${c.codeName}: ${c.title}",
+                                color = if (done) CyberNeonGreen else if (unlocked) CyberText else CyberMuted,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun NetworkRadarView(nodes: List<NetNode>, modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "radar")
+    val pulseRadius by infiniteTransition.animateFloat(
+        initialValue = 12f,
+        targetValue = 42f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse"
+    )
+    val textMeasurer = rememberTextMeasurer()
+
+    Column(
+        modifier = modifier
+            .background(Color(0xFF040709), RoundedCornerShape(6.dp))
+            .border(1.dp, CyberBorder, RoundedCornerShape(6.dp))
+            .padding(12.dp)
+    ) {
+        Text(
+            text = "LIVE PACKET TOPOLOGY // THREAT RADAR",
+            color = CyberCyan,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp
+        )
+        Text(
+            text = "RED NODES INDICATE ANOMALOUS ROUTING SIGNATURES",
+            color = CyberMuted,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            // Subtle Grid Lines
+            val step = 60f
+            var x = 0f
+            while (x < w) {
+                drawLine(Color(0xFF0E1A22), Offset(x, 0f), Offset(x, h), 1f)
+                x += step
+            }
+            var y = 0f
+            while (y < h) {
+                drawLine(Color(0xFF0E1A22), Offset(0f, y), Offset(w, y), 1f)
+                y += step
+            }
+
+            // Connect Nodes with Dashed Lines
+            for (i in 0 until nodes.size - 1) {
+                val p1 = Offset(nodes[i].xRatio * w, nodes[i].yRatio * h)
+                val p2 = Offset(nodes[i + 1].xRatio * w, nodes[i + 1].yRatio * h)
+                drawLine(
+                    color = if (nodes[i + 1].isThreat) CyberRed.copy(alpha = 0.6f) else CyberCyan.copy(alpha = 0.5f),
+                    start = p1,
+                    end = p2,
+                    strokeWidth = 3f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
+                )
+            }
+
+            // Draw Nodes
+            nodes.forEach { node ->
+                val center = Offset(node.xRatio * w, node.yRatio * h)
+                val nodeColor = if (node.isThreat) CyberRed else CyberNeonGreen
+
+                if (node.isThreat) {
+                    drawCircle(
+                        color = CyberRed.copy(alpha = (1f - pulseRadius / 42f).coerceIn(0f, 0.7f)),
+                        radius = pulseRadius,
+                        center = center,
+                        style = Stroke(width = 2.5f)
+                    )
+                }
+
+                drawCircle(color = CyberBg, radius = 14f, center = center)
+                drawCircle(color = nodeColor, radius = 10f, center = center)
+
+                val labelLayout = textMeasurer.measure(
+                    text = "${node.label}\n${node.ip}",
+                    style = TextStyle(
+                        color = nodeColor,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                drawText(
+                    textLayoutResult = labelLayout,
+                    topLeft = Offset(
+                        (center.x - labelLayout.size.width / 2f).coerceIn(8f, w - labelLayout.size.width - 8f),
+                        (center.y + 18f).coerceAtMost(h - labelLayout.size.height - 8f)
+                    )
+                )
             }
         }
     }
